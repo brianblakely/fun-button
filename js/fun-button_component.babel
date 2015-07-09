@@ -1,0 +1,244 @@
+/* global PIXI, Polymer, Shader, ButtonCanvas, toCamelCase */
+
+const FunButton = Polymer({
+  is: `fun-button`,
+  extends: `button`,
+
+  hostAttributes: {
+    role: `button`
+  },
+
+  properties: {
+    effect: {
+      type: String
+    },
+    downEffect: {
+      type: String
+    },
+    upEffect: {
+      type: String
+    },
+    focusEffect: {
+      type: String
+    },
+    overEffect: {
+      type: String
+    },
+    disabledEffect: {
+      type: String
+    },
+    effectPadding: {
+      type: Number
+    }
+  },
+
+  // Element Lifecycle
+  created() {},
+  ready() {
+    // `ready` is called after all elements have been configured, but
+    // propagates bottom-up. This element's children are ready, but parents
+    // are not.
+    //
+    // This is the point where you should make modifications to the DOM (when
+    // necessary), or kick off any processes the element wants to perform.
+
+    this.width = this.offsetWidth;
+    this.height = this.offsetHeight;
+
+    this.canvasElement = this.$$(`canvas`);
+
+    this.canvas = new ButtonCanvas(this, getComputedStyle(this), this.canvasElement);
+
+    // Parse effects.
+
+    this.shaders = {};
+    this.garbageShaders = {};
+
+    this.parseEffects();
+    this.applyEffect(`effect`);
+
+    this.stateListeners();
+  },
+  attached() {
+    // `attached` fires once the element and its parents have been inserted
+    // into a document.
+    //
+    // This is a good place to perform any work related to your element's
+    // visual state or active behavior (measuring sizes, beginning animations,
+    // loading resources, etc).
+  },
+  detached() {
+    // The analog to `attached`, `detached` fires when the element has been
+    // removed from a document.
+    //
+    // Use this to clean up anything you did in `attached`.
+  },
+  attributeChanged(name) {
+    if(name.includes(`effect`)) {
+      this.parseEffects(toCamelCase(name, true));
+    }
+  },
+
+  // Element Behavior
+
+  parseEffects(state) {
+    // No argument means parse all effects.
+    if(!state) {
+      for(let state in this.properties) {
+        this.parseEffects(state);
+      }
+
+      return;
+    }
+
+    // Check for blank effects and padding attribute.
+    if(this[state] === undefined || state === `effectPadding`) {
+      return;
+    }
+
+    this.garbageShaders[state] = this.shaders[state];
+
+    // Parse effect value and create shaders for each entry.
+    this.shaders[state] = {};
+
+    let shaderEntries = this[state].split(/,\s*/);
+
+    for(let entry of shaderEntries) {
+      let shaderArgs = entry.split(/\s+/);
+
+      let src = shaderArgs[0].match(/^(?:url\()?(.*?)\)?$/)[1],
+          layer = shaderArgs[1] || `all`;
+
+      let shader = new Shader(src);
+
+      this.shaders[state][layer] = this.shaders[state][layer] || [];
+      this.shaders[state][layer].push(shader);
+    }
+    
+    // Clean up unused layers.
+    this.removeEffect(state);
+  },
+
+  applyEffect(state) {
+    if(!this.shaders[state]) {
+      return;
+    }
+
+    // Apply effect by layer.
+    for(let layer in this.shaders[state]) {
+      Promise.all(
+        this.shaders[state][layer].map(shader => shader.load())
+      ).then(shaders => {
+        // Wipe existing layer shaders.
+        this.removeEffect(state, layer);
+
+        // Apply all shaders to layer at once.
+        let currFilters = this.canvas.layers[layer].filters,
+            addFilters = shaders.map(
+              shader => shader.attachTo(this, layer)
+            );
+        if(currFilters) {
+          this.canvas.layers[layer].filters = Array.of(...currFilters).concat(addFilters);
+        } else {
+          this.canvas.layers[layer].filters = addFilters;
+        }
+        
+        this.shaders[state][layer].forEach(shader => shader.start());
+      });
+    }
+  },
+
+  removeEffect(state, layer) {
+    if(layer in this.shaders[state]) {
+      this.shaders[state][layer].forEach(shader => shader.stop());
+      
+      //let filter = this.canvas.layers[layer].filters;
+      //this.canvas.layers[layer].filters = null;
+
+      return;
+    }
+
+    for(let layer in this.garbageShaders[state]) {
+      if(this.shaders[state][layer]) {
+        continue;
+      }
+
+      this.garbageShaders[state][layer].map(shader => shader.stop());
+      this.canvas.layers[layer].filters = null;
+      delete this.garbageShaders[state][layer];
+    }
+  },
+
+  listeners: {
+    down: `downState`,
+    up: `upState`,
+    track: `overState`
+  },
+
+  stateListeners() {
+    this.setScrollDirection(`all`);
+
+    this.addEventListener(`mousemove`, this.overState);
+    this.addEventListener(`mouseout`, this.outState);
+
+    this.addEventListener(`keydown`, e => {
+      if(this.isDown) {
+        return false;
+      }
+
+      if(e.keyCode === 32) {
+        this.isDown = true;
+      }
+
+      this.downState();
+    });
+    this.addEventListener(`keyup`, e => {
+      if(e.keyCode !== 32) {
+        return false;
+      }
+      
+      this.isDown = false;
+      
+      this.upState();
+    });
+
+    this.addEventListener(`focus`, this.focusState);
+    this.addEventListener(`blur`, this.blurState);
+  },
+
+  downState(e) {
+    this.removeEffect(`upEffect`);
+    this.applyEffect(`downEffect`);
+  },
+
+  upState(e) {
+    this.removeEffect(`downEffect`);
+    this.applyEffect(`upEffect`);
+  },
+
+  focusState(e) {
+    this.applyEffect(`focusEffect`);
+  },
+
+  blurState(e) {
+    this.removeEffect(`focusEffect`);
+  },
+
+  overState(e) {
+    if(e.buttons || e.detail && e.detail.hover() !== this.canvasElement) {
+      e.preventDefault();
+      return false;
+    }
+
+    this.applyEffect(`overEffect`);
+  },
+
+  outState(e) {
+    this.removeEffect(`overEffect`);
+  },
+
+  disabledState(e) {
+    console.log(`disabled!`);
+  }
+
+});

@@ -1,0 +1,145 @@
+/* global PIXI, Polymer */
+
+// Draw button.
+
+const pixiColor = color => {
+  color = color.match(/[0.]{0,}\d+/g);
+
+  return {
+    hex:
+      `0x` +
+      (`0` + parseInt(color[0],10).toString(16)).slice(-2) +
+      (`0` + parseInt(color[1],10).toString(16)).slice(-2) +
+      (`0` + parseInt(color[2],10).toString(16)).slice(-2),
+
+    alpha: color[3] || 1
+  };
+};
+
+class ButtonCanvas {
+  // h = HTML button.
+  // s = CSS styles.
+  // c = Canvas element.
+  constructor(h, s, c) {
+    Object.assign(this, {h,s,c});
+
+    this.container = new PIXI.Container();
+
+    this.layers = {
+      text: null,
+      border: new PIXI.Graphics(),
+      background: new PIXI.Container()
+    };
+
+    this.draw(h, s, this.layers);
+
+    this.container.mask = this.mask;
+
+    this.container.children = [];
+
+    for(let layer in this.layers) {
+      this.container.addChild(this.layers[layer]);
+    }
+
+    this.container.children.reverse();
+
+    this.renderer = new PIXI.autoDetectRenderer(
+      h.width,
+      h.height,
+      {
+        view: c,
+        transparent: true,
+        antialias: true,
+        resolution: window.devicePixelRatio
+      }
+    );
+
+    c.style.width = `${h.width}px`;
+    c.style.height = `${h.height}px`;
+    c.style.top = `-${s[`border-width`]}`;
+    c.style.left = `-${s[`border-width`]}`;
+
+    h.style.borderColor = `rgba(0,0,0,0)`;
+    h.style.color = `rgba(0,0,0,0)`;
+    h.style.background = `none`;
+
+    this.renderer.render(this.container);
+  }
+  draw(h, s, l) {
+    // h = HTML button.
+    // s = CSS styles.
+    // l = PIXI layers.
+    let width = h.width,
+        height = h.height,
+        bRad = parseInt(s[`border-radius`]),
+        bCol = pixiColor(s[`border-color`]),
+        bWid = parseInt(s[`border-width`]),
+        bgColor = pixiColor(s[`background-color`]),
+        bgImage = s[`background-image`].match(/url\((.*)\)/);
+
+    let rectType = bRad > 0 ? `RoundedRect` : `Rect`;
+
+    // Text.
+    l.text = new PIXI.Text(h.textContent.trim(), {
+      font: `${s[`font-style`]} ${s[`font-weight`]} ${s[`font-size`]} ${s[`font-family`]}`,
+      fill: s[`color`] // Uses Canvas/CSS color.
+    });
+    l.text.resolution = window.devicePixelRatio;
+    l.text.position.x = width/2 - l.text.width/2;
+    l.text.position.y = height/2 - l.text.height/2;
+
+    // Background.
+    let bgRect = new PIXI.Graphics();
+    bgRect.beginFill(bgColor.hex, bgColor.alpha);
+    bgRect[`draw${rectType}`](
+      0,
+      0,
+      width,
+      height,
+      bRad
+    );
+    bgRect.endFill();
+    l.background.addChild(bgRect);
+
+    if(bgImage) {
+      bgImage = bgImage[1];
+      
+      let loader = new PIXI.loaders.Loader();
+      loader.add(`image`, bgImage);
+      loader.once(`complete`, (self, resource) => {
+        let bgSprite = new PIXI.Sprite(resource.image.texture);
+        
+        bgSprite.position.x += bWid;
+        bgSprite.position.y += bWid;
+        l.background.addChild(bgSprite);
+        
+        this.renderer.render(this.container);
+      });
+      loader.load();
+    }
+
+    // Border.
+    l.border.lineStyle(bWid*2, bCol.hex, bCol.alpha);
+    l.border[`draw${rectType}`](
+      0,
+      0,
+      width,
+      height,
+      bRad
+    );
+
+    // Mask.
+    let mask = new PIXI.Graphics();
+    mask.beginFill(0x000000);
+    mask[`draw${rectType}`](
+      0,
+      0,
+      width,
+      height,
+      bRad
+    );
+    mask.endFill();
+
+    this.mask = mask;
+  }
+}

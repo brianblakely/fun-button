@@ -1,0 +1,22 @@
+{
+  "name": "fun-button",
+  "version": "0.0.1",
+  "authors": [
+    "Brian Blakely <anewpage.media@gmail.com>"
+  ],
+  "description": "Render buttons with WebGL and apply fragment shader effects.",
+  "main": "index.html",
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "pixi": "*",
+    "polymer": "*"
+  }
+}
