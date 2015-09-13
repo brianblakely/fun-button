@@ -18,9 +18,12 @@ const toCamelCase = (str, noFirstCap, firstWordCap) => {
 };
 
 class Shader {
-  constructor(src) {
+  constructor(src, animated) {
     this.src = src;
+    this.animated = animated;
     this.uniforms = Object.assign({}, Shader.standardUniforms);
+    
+    this.load();
   }
   
   // Creates filter from shader, loading custom shader code if necessary. 
@@ -102,9 +105,11 @@ class Shader {
   }
 
   start() {
-    let ticker = PIXI.ticker.shared;
-
-    ticker.add(this.tick, this);
+    if(this.animated) {
+      let ticker = PIXI.ticker.shared;
+  
+      ticker.add(this.tick, this);
+    }
   }
   
   tick(delta) {
@@ -130,9 +135,11 @@ class Shader {
   }
   
   stop() {
-    let ticker = PIXI.ticker.shared;
-
-    ticker.remove(this.tick, this);
+    if(this.animated) {
+      let ticker = PIXI.ticker.shared;
+  
+      ticker.remove(this.tick, this);
+    }
   }
 }
 

@@ -107,9 +107,10 @@ const FunButton = Polymer({
       let shaderArgs = entry.split(/\s+/);
 
       let src = shaderArgs[0].match(/^(?:url\()?(.*?)\)?$/)[1],
-          layer = shaderArgs[1] || `all`;
+          layer = shaderArgs[1].split(`/`)[0] || `all`,
+          animated = !!shaderArgs[1].split(`/`)[1];
 
-      let shader = new Shader(src);
+      let shader = new Shader(src, animated);
 
       this.shaders[state][layer] = this.shaders[state][layer] || [];
       this.shaders[state][layer].push(shader);
@@ -122,6 +123,39 @@ const FunButton = Polymer({
   applyEffect(state) {
     if(!this.shaders[state]) {
       return;
+    }
+    
+    let shadersByLayer = {};
+
+    for(let iState in this.shaders) {
+      // Check for blank effects and padding attribute.
+      if(this[iState] === undefined || iState === `effectPadding`) {
+        continue;
+      }
+
+      // Apply effect by layer.
+      for(let layer in this.shaders[iState]) {
+        shadersByLayer[layer] = shadersByLayer[layer] || [];
+        
+        shadersByLayer[layer].concat(
+          this.shaders[iState][layer].map(shader => shader.load())
+        );
+      }
+      
+      if(iState === state) {
+        break;
+      }
+    }
+    
+    for(let layer in shadersByLayer) {
+      Promise.all(shadersByLayer[layer]).then(shaders => {
+        // Wipe existing layer shaders.
+        this.removeEffect(iState, layer);
+  
+        this.canvas.layers[layer].filters = shaders;
+        
+        this.shaders[iState][layer].forEach(shader => shader.start());
+      }); 
     }
 
     // Apply effect by layer.
